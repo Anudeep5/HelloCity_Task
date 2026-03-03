@@ -4,7 +4,7 @@ AI-Powered Onboarding (Miami City Guide)
 
 ## Live Demo URL
 
-  `URL Placeholder`
+  `https://hello-city-task.vercel.app/`
 
 ---
 

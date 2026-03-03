@@ -8,10 +8,12 @@ import type { ChatMessage, PlaceCard as PlaceCardT } from "../api/types";
 
 function getSessionId(): string {
     const key = "hellocity_session_id";
-    let v = localStorage.getItem(key);
+
+    // sessionStorage resets when the tab is reopened
+    let v = sessionStorage.getItem(key);
     if (!v) {
         v = uuidv4();
-        localStorage.setItem(key, v);
+        sessionStorage.setItem(key, v);
     }
     return v;
 }
