@@ -65,7 +65,7 @@ Frontend sends:
 ```json
 {
   "session_id": "abc123",
-  "message": "I love rooftop bars and live music"
+  "message": "I love Beach"
 }
 ```
 
@@ -107,7 +107,7 @@ Gemini is prompted to return strict JSON:
 
 ```json
 {
-  "interests": ["Rooftop bars", "Live jazz"]
+  "interests": ["Beach"]
 }
 ```
 
