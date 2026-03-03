@@ -4,7 +4,7 @@ AI-Powered Onboarding (Miami City Guide)
 
 ## Live Demo URL
 
-  `https://hello-city-task.vercel.app/`
+`https://hello-city-task.vercel.app/`
 
 ---
 
@@ -12,15 +12,16 @@ AI-Powered Onboarding (Miami City Guide)
 
 This project implements a mobile-first AI onboarding experience for HelloCity.
 
-The assistant collects exactly **3 user interests** about what they enjoy doing in Miami. After each detected interest, the system:
+The assistant collects exactly **three interests** about what a user enjoys doing in Miami. After each detected interest, the system:
 
 1. Validates the interest
-2. Fetches 3 real Miami venues
+2. Fetches three real Miami venues
 3. Asks the user to confirm
 4. Moves forward regardless of confirmation
-5. Stops after 3 interests and returns a structured profile
+5. Stops after three interests and returns a structured profile
 
-The backend fully controls state and progression logic. The LLM is used strictly for reasoning and structured extraction.
+The backend fully controls progression logic and session state.
+The LLM is used only for reasoning and structured extraction.
 
 ---
 
@@ -31,7 +32,8 @@ The backend fully controls state and progression logic. The LLM is used strictly
 * React (Vite)
 * TypeScript
 * Custom CSS styled to match HelloCity branding
-* Mobile-first responsive design
+* Mobile-first responsive layout
+* Session ID stored in `sessionStorage` (resets when tab is closed)
 
 ## Backend
 
@@ -42,30 +44,37 @@ The backend fully controls state and progression logic. The LLM is used strictly
 
 ---
 
-# LLM Used
+# LLM Details
 
-**Model:** Gemini 2.5 Flash
-**SDK:** Google GenAI SDK
+Model: **Gemini 2.5 Flash**
+SDK: **google-genai**
 
 Gemini is used for:
 
-* Extracting structured interest categories from user input
-* Generating short, friendly conversational responses
+* Extracting structured interest categories from natural language
+* Generating short conversational responses
 
-Gemini is NOT used to manage state or progression logic.
+Gemini is not responsible for:
+
+* Tracking progress
+* Enforcing three interests
+* Deduplication
+* Session management
+
+All deterministic logic is handled server-side.
 
 ---
 
 # Architecture Overview
 
-## 1. Conversation Flow
+## Conversation Flow
 
 Frontend sends:
 
 ```json
 {
   "session_id": "abc123",
-  "message": "I love Beach"
+  "message": "I love Beaches"
 }
 ```
 
@@ -73,31 +82,31 @@ Backend:
 
 * Calls Gemini to extract structured interests
 * Deduplicates interests
-* Adds at most 1 new interest per message
-* Fetches 3 real Miami venues using Overpass
+* Adds at most one new interest per message
+* Fetches three real venues using Overpass
 * Returns structured response
-* Stops after exactly 3 interests
+* Stops after exactly three interests
 
 ---
 
-## 2. Clear Separation of Responsibilities
+## Clear Separation of Responsibilities
 
 ### LLM Responsibilities
 
-* Natural language understanding
-* Structured JSON extraction
-* Friendly assistant tone
+* Understand user input
+* Extract interest categories
+* Produce friendly tone
 
 ### Backend Responsibilities
 
-* Session state management
-* Interest deduplication
-* Enforcing exactly 3 interests
-* Progression control
-* Venue fetching via Overpass
-* Final profile construction
+* Maintain session state
+* Prevent duplicate interests
+* Enforce maximum of three interests
+* Control onboarding progression
+* Fetch venues from Overpass
+* Construct final profile object
 
-The backend is deterministic. The LLM does not control onboarding progression.
+This ensures predictable behavior and prevents LLM-driven flow errors.
 
 ---
 
@@ -107,18 +116,18 @@ Gemini is prompted to return strict JSON:
 
 ```json
 {
-  "interests": ["Beach"]
+  "interests": ["Beaches"]
 }
 ```
 
-Rules enforced:
+Rules:
 
-* Broad activity categories
-* Maximum 3 interests
-* JSON-only output
-* Backend validates and deduplicates
+* Broad activity categories only
+* Maximum three
+* JSON only
+* Backend validates output before use
 
-If parsing fails, the backend falls back safely.
+If JSON parsing fails, fallback logic is triggered.
 
 ---
 
@@ -126,25 +135,23 @@ If parsing fails, the backend falls back safely.
 
 Instead of Google Places, this implementation uses:
 
-* **OpenStreetMap data**
-* **Overpass API**
+* OpenStreetMap data
+* Overpass API
 
 For each interest:
 
-* Construct Overpass query
+* Construct an Overpass query
 * Search within Miami bounding box
-* Filter by relevant OSM tags (e.g., `amenity=bar`, `amenity=cafe`, `tourism=gallery`)
-* Return top 3 results
+* Filter relevant OSM tags
+* Return top three matches
 
 Each example includes:
 
 * Name
 * Address (when available)
-* OSM ID
 * Map link
-* Latitude/Longitude
 
-Regardless of user confirmation (Yes/No), the interest counts and the flow continues.
+Regardless of Yes/No confirmation, the interest counts and flow continues.
 
 ---
 
@@ -163,12 +170,15 @@ sessions = {
 }
 ```
 
-Features:
+Behavior:
 
-* Prevents duplicate interests
-* Adds at most one new interest per message
-* Stops at exactly 3 interests
-* Easy to upgrade to Redis
+* Prevents duplicates
+* Adds at most one interest per message
+* Stops at exactly three
+* Session resets when browser tab is closed
+* Backend restart clears all sessions
+
+Designed to be easily replaced with Redis.
 
 ---
 
@@ -213,25 +223,23 @@ Request:
 }
 ```
 
-Response:
-
-* Advances conversation
-* Returns updated state
+Returns updated assistant message and onboarding state.
 
 ---
 
 # UI Design
 
-The UI matches HelloCity branding:
+The UI is styled to match HelloCity branding:
 
 * HelloCity Yellow accent
 * Black venue cards
-* Clean white base background
-* iOS-style rounded pills
+* Clean white background
+* iOS-style rounded pill buttons
 * Light gray user bubbles
 * Soft yellow assistant bubbles
-* Mobile-first layout
-* Smooth scroll behavior
+* Smooth mobile scrolling
+
+Designed mobile-first and responsive.
 
 ---
 
@@ -273,40 +281,121 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ---
 
+# Deployment Guide
+
+## Backend Deployment (Render)
+
+1. Create a Web Service on Render
+2. Set Root Directory to `backend`
+3. Build Command:
+
+```
+pip install -r requirements.txt
+```
+
+4. Start Command:
+
+```
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+5. Set environment variables:
+
+```
+GEMINI_API_KEY=your_key
+GEMINI_MODEL=gemini-2.5-flash
+ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
+```
+
+Verify health:
+
+```
+https://your-render-service.onrender.com/health
+```
+
+---
+
+## Frontend Deployment (Vercel)
+
+1. Import repo into Vercel
+2. Set Root Directory to `frontend`
+3. Build Command:
+
+```
+npm run build
+```
+
+4. Output Directory:
+
+```
+dist
+```
+
+5. Set environment variable:
+
+```
+VITE_API_BASE_URL=https://your-render-service.onrender.com
+```
+
+Redeploy after configuration.
+
+---
+
+# CORS Configuration
+
+FastAPI CORS:
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+Important:
+
+* Origins must match exactly
+* No trailing slashes
+* Include correct Vercel domain
+
+---
+
 # Edge Cases Handled
 
 * Duplicate interests prevented
-* JSON parsing safety for Gemini output
-* Graceful error handling
-* At most one interest added per message
-* Exactly 3 interests enforced
+* Strict three interest limit
+* JSON parsing fallback
+* Graceful API failure handling
 * Session isolation per user
-* Mobile scroll handling
+* Preflight CORS handling
+* Overpass timeout handling
 
 ---
 
 # Design Decisions
 
-* Backend controls all progression logic
-* LLM only used for reasoning
-* Overpass API chosen for open, free geographic data
+* Backend controls progression logic
+* LLM used only for reasoning
+* OpenStreetMap chosen for open data
+* In-memory state sufficient for demo
 * Deterministic onboarding flow
 * Clean separation of concerns
 
 ---
 
-# Possible Improvements
+# Future Improvements
 
-If more time were available:
-
-* Redis-based persistent session storage
+* Redis for persistent sessions
 * Caching Overpass responses
-* Smarter OSM tag mapping per interest
-* Add venue images via Wikimedia or additional APIs
-* Add rate limiting
-* Add production logging
-* Add analytics on interest trends
-* Improve taxonomy normalization
+* Smarter interest taxonomy normalization
+* Venue image enrichment
+* Analytics
+* Rate limiting
+* Structured logging
+* Monitoring and observability
 
 ---
 
@@ -314,10 +403,12 @@ If more time were available:
 
 The system:
 
-* Collects exactly 3 interests
-* Validates each with real Miami venues via OSM
+* Collects exactly three interests
+* Validates each using real Miami venues
 * Maintains backend session state
 * Prevents duplicates
-* Returns a structured profile
-* Matches HelloCity brand style
-* Is fully deployable
+* Returns structured profile
+* Matches HelloCity branding
+* Fully deployable on modern cloud platforms
+
+---
