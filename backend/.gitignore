@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+env/
+ENV/
+
+# env variables
+.env*
+!.env.example
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+.eggs/
+*.egg-info/
+.installed.cfg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Logs and temp
+*.log
+*.pot
+*.pyc
+*.pyo
+*.tmp
+*.swp
+.DS_Store
+
+# Test and coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+*.cover
+.cache
+pytest_cache/
+.pytest_cache/
