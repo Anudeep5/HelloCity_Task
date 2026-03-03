@@ -18,10 +18,11 @@ function getSessionId(): string {
 
 export default function Chat() {
     const sessionId = useMemo(() => getSessionId(), []);
+
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             role: "assistant",
-            text: "Hey! I’m HelloCity. What do you like doing when you go out in Miami?",
+            text: "Welcome to HelloCity. What do you like doing when you go out in Miami?",
         },
     ]);
 
@@ -36,9 +37,12 @@ export default function Chat() {
     const [interests, setInterests] = useState<string[]>([]);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
+
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, examples, profile]);
+
+    const inputDisabled = loading || !!examples || !!profile;
 
     async function handleSend(text: string) {
         setLoading(true);
@@ -80,6 +84,8 @@ export default function Chat() {
                     text: `Something went wrong. ${e?.message ?? ""}`.trim(),
                 },
             ]);
+            setPendingInterest(null);
+            setExamples(null);
         } finally {
             setLoading(false);
         }
@@ -103,6 +109,7 @@ export default function Chat() {
 
             setPendingInterest(null);
             setExamples(null);
+
             setInterests(data.interests ?? interests);
 
             if (data.onboarding_complete && data.profile) {
@@ -128,192 +135,114 @@ export default function Chat() {
 
         setInput("");
         setMessages((m) => [...m, { role: "user", text }]);
-        handleSend(text);
+        void handleSend(text);
     }
 
-    const inputDisabled = loading || !!examples || !!profile;
-
     return (
-        <div
-            style={{
-                minHeight: "100vh",
-                background: "#050a14",
-                display: "flex",
-                justifyContent: "center",
-            }}
-        >
-            <div
-                style={{
-                    width: "100%",
-                    maxWidth: 460,
-                    display: "flex",
-                    flexDirection: "column",
-                }}
-            >
-                <div
-                    style={{
-                        padding: "14px 16px",
-                        color: "white",
-                        borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    }}
-                >
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>
-                        HelloCity
-                    </div>
-                    <div
-                        style={{
-                            fontSize: 12,
-                            color: "rgba(255,255,255,0.7)",
-                            marginTop: 4,
-                        }}
-                    >
-                        Interests: {interests.length}/3
+        <div className="hc-app">
+            <div className="hc-shell">
+                {/* Header */}
+                <div className="hc-header">
+                    <div className="hc-brandRow">
+                        <div>
+                            <div className="hc-title">
+                                Hello<span className="hc-city">City</span>
+                            </div>
+                            <div className="hc-sub">
+                                Interests: {interests.length}/3
+                            </div>
+                        </div>
+                        <div className="hc-pill">Miami</div>
                     </div>
                 </div>
 
-                <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
+                {/* Body */}
+                <div className="hc-body">
                     {messages.map((m, idx) => (
                         <Bubble key={idx} role={m.role} text={m.text} />
                     ))}
 
+                    {/* Examples + Yes/No */}
                     {examples?.length ? (
-                        <div style={{ marginTop: 12 }}>
-                            <div
-                                style={{
-                                    color: "white",
-                                    fontWeight: 700,
-                                    marginBottom: 10,
-                                }}
-                            >
-                                Miami picks for: {pendingInterest}
+                        <div>
+                            <div className="hc-sectionTitle">
+                                Emily’s Picks: {pendingInterest}
                             </div>
 
-                            <div style={{ display: "grid", gap: 10 }}>
+                            <div className="hc-cardGrid">
                                 {examples.map((p, i) => (
                                     <PlaceCard key={i} p={p} />
                                 ))}
                             </div>
 
-                            <div
-                                style={{
-                                    display: "flex",
-                                    gap: 10,
-                                    marginTop: 12,
-                                }}
-                            >
+                            <div className="hc-actions">
                                 <button
+                                    className="hc-btn hc-btnPrimary"
                                     onClick={() => void handleFeedback("yes")}
                                     disabled={loading}
-                                    style={{
-                                        flex: 1,
-                                        borderRadius: 12,
-                                        padding: 12,
-                                        border: "none",
-                                        background: "#1b5cff",
-                                        color: "white",
-                                        fontWeight: 700,
-                                    }}
+                                    type="button"
                                 >
                                     Yes, that’s what I meant
                                 </button>
 
                                 <button
+                                    className="hc-btn hc-btnGhost"
                                     onClick={() => void handleFeedback("no")}
                                     disabled={loading}
-                                    style={{
-                                        flex: 1,
-                                        borderRadius: 12,
-                                        padding: 12,
-                                        border: "1px solid rgba(255,255,255,0.18)",
-                                        background: "transparent",
-                                        color: "white",
-                                        fontWeight: 700,
-                                    }}
+                                    type="button"
                                 >
                                     No
                                 </button>
                             </div>
 
-                            <div
-                                style={{
-                                    marginTop: 8,
-                                    fontSize: 12,
-                                    color: "rgba(255,255,255,0.65)",
-                                }}
-                            >
-                                Confirm the examples first, then continue.
+                            <div className="hc-hint">
+                                Confirm the picks first, then continue.
                             </div>
                         </div>
                     ) : null}
 
+                    {/* Profile */}
                     {profile ? (
-                        <div
-                            style={{
-                                marginTop: 16,
-                                padding: 14,
-                                borderRadius: 14,
-                                background: "#0b1220",
-                                color: "white",
-                            }}
-                        >
-                            <div style={{ fontWeight: 800, marginBottom: 8 }}>
-                                Your profile
+                        <div className="hc-profile">
+                            <div className="hc-profileBody">
+                                <div className="hc-profileTitle">
+                                    Your profile
+                                </div>
+                                <pre className="hc-profilePre">
+                                    {JSON.stringify(profile, null, 2)}
+                                </pre>
                             </div>
-                            <pre
-                                style={{
-                                    margin: 0,
-                                    whiteSpace: "pre-wrap",
-                                    color: "rgba(255,255,255,0.85)",
-                                }}
-                            >
-                                {JSON.stringify(profile, null, 2)}
-                            </pre>
                         </div>
                     ) : null}
 
                     <div ref={bottomRef} />
                 </div>
 
-                <form
-                    onSubmit={onSubmit}
-                    style={{
-                        padding: 12,
-                        borderTop: "1px solid rgba(255,255,255,0.08)",
-                    }}
-                >
-                    <div style={{ display: "flex", gap: 10 }}>
+                {/* Footer input */}
+                <form className="hc-footer" onSubmit={onSubmit}>
+                    <div className="hc-inputRow">
                         <input
+                            className="hc-input"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             placeholder={
-                                loading ? "Thinking..." : "Type your answer..."
+                                loading ? "Thinking..." : "Type or speak..."
                             }
                             disabled={inputDisabled}
-                            style={{
-                                flex: 1,
-                                padding: 12,
-                                borderRadius: 12,
-                                border: "1px solid rgba(255,255,255,0.12)",
-                                background: "#0b1220",
-                                color: "white",
-                                outline: "none",
-                            }}
                         />
                         <button
+                            className="hc-send"
                             type="submit"
                             disabled={inputDisabled || !input.trim()}
-                            style={{
-                                padding: "0 14px",
-                                borderRadius: 12,
-                                border: "none",
-                                background: "#1b5cff",
-                                color: "white",
-                                fontWeight: 800,
-                            }}
                         >
                             Send
                         </button>
                     </div>
+                    {examples?.length ? (
+                        <div className="hc-hint">
+                            You can type again after confirming.
+                        </div>
+                    ) : null}
                 </form>
             </div>
         </div>
