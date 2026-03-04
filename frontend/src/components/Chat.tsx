@@ -95,7 +95,6 @@ export default function Chat() {
 
     async function handleFeedback(choice: "yes" | "no") {
         if (!pendingInterest) return;
-
         setLoading(true);
         try {
             const data = await postFeedback({
@@ -108,23 +107,27 @@ export default function Chat() {
                 ...m,
                 { role: "assistant", text: data.assistant_message },
             ]);
-
-            setPendingInterest(null);
-            setExamples(null);
-
-            setInterests(data.interests ?? interests);
+            setInterests(data.interests || []);
 
             if (data.onboarding_complete && data.profile) {
                 setProfile(data.profile);
+                setPendingInterest(null);
+                setExamples(null);
+                return;
             }
-        } catch (e: any) {
-            setMessages((m) => [
-                ...m,
-                {
-                    role: "assistant",
-                    text: `Something went wrong. ${e?.message ?? ""}`.trim(),
-                },
-            ]);
+
+            // NEW: feedback can return next interest examples
+            if (
+                data.interest_detected &&
+                data.examples &&
+                data.interest_added
+            ) {
+                setPendingInterest(data.interest_added);
+                setExamples(data.examples);
+            } else {
+                setPendingInterest(null);
+                setExamples(null);
+            }
         } finally {
             setLoading(false);
         }

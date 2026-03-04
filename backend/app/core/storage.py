@@ -4,6 +4,7 @@ from typing import Any
 
 SessionState = dict[str, Any]
 
+
 class InMemoryStore:
     def __init__(self) -> None:
         self.sessions: dict[str, SessionState] = {}
@@ -20,6 +21,7 @@ class InMemoryStore:
                 "history": [],
                 "last_interest": None,
                 "last_examples": None,
+                "pending_interests": [],
             }
             self.sessions[session_id] = s
         s["updated_at"] = time.time()
@@ -31,7 +33,9 @@ class InMemoryStore:
         x = re.sub(r"\s+", " ", x)
         return x.lower()
 
-    def add_interest_deduped(self, session: SessionState, interest: str) -> tuple[bool, str | None]:
+    def add_interest_deduped(
+        self, session: SessionState, interest: str
+    ) -> tuple[bool, str | None]:
         raw = (interest or "").strip()
         if not raw:
             return False, None
