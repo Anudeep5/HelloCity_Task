@@ -11,9 +11,11 @@ store = InMemoryStore()
 llm = GeminiService()
 places = PlacesService(store.places_cache)
 
+
 @router.get("/health")
 def health():
     return {"ok": True}
+
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
@@ -33,7 +35,7 @@ async def chat(req: ChatRequest):
 
     interest_detected = False
     interest_added = None
-    examples_models = None
+    examples_models: list[PlaceCard] = []
 
     # Add at most one new interest per message (cleaner UX)
     for cand in extracted:
@@ -43,20 +45,34 @@ async def chat(req: ChatRequest):
             interest_added = canonical
             break
 
-    assistant_message = llm.chat_reply(session["interests"], req.message, interest_added)
+    assistant_message = llm.chat_reply(
+        session["interests"], req.message, interest_added
+    )
 
     if interest_detected and interest_added:
         cache_key = store.normalize_interest(interest_added)
-        ex = await places.get_examples(interest_added, cache_key)
-        examples_models = [PlaceCard(**x) for x in ex]
-        session["last_interest"] = interest_added
-        session["last_examples"] = ex
+
+        try:
+            ex = await places.get_examples(interest_added, cache_key)
+            examples_models = [PlaceCard(**x) for x in (ex or [])]
+            session["last_interest"] = interest_added
+            session["last_examples"] = ex or []
+        except Exception:
+            # Never fail the chat endpoint due to places lookup
+            examples_models = []
+            session["last_interest"] = interest_added
+            session["last_examples"] = []
     else:
         session["last_interest"] = None
-        session["last_examples"] = None
+        session["last_examples"] = []
+        examples_models = []
 
     onboarding_complete = len(session["interests"]) >= settings.MAX_INTERESTS
-    profile = {"interests": session["interests"][: settings.MAX_INTERESTS]} if onboarding_complete else None
+    profile = (
+        {"interests": session["interests"][: settings.MAX_INTERESTS]}
+        if onboarding_complete
+        else None
+    )
 
     session["history"].append({"role": "user", "content": req.message})
     session["history"].append({"role": "assistant", "content": assistant_message})
@@ -70,6 +86,7 @@ async def chat(req: ChatRequest):
         onboarding_complete=onboarding_complete,
         profile=profile,
     )
+
 
 @router.post("/api/feedback", response_model=ChatResponse)
 async def feedback(req: FeedbackRequest):

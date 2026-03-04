@@ -23,6 +23,6 @@ class ChatResponse(BaseModel):
     interests: list[str]
     interest_detected: bool
     interest_added: Optional[str] = None
-    examples: Optional[list[PlaceCard]] = None
+    examples: list[PlaceCard] = Field(default_factory=list)
     onboarding_complete: bool
     profile: Optional[dict[str, Any]] = None

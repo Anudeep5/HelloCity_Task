@@ -3,26 +3,20 @@ from __future__ import annotations
 
 from typing import Any, Optional
 import re
+import asyncio
+import random
 import httpx
+from .tag_map import TAG_MAP
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Rotate endpoints because public Overpass instances often time out.
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.nchc.org.tw/api/interpreter",
+]
 
 # Miami bounding box (south, west, north, east)
 MIAMI_BBOX = (25.70, -80.30, 25.85, -80.10)
-
-# Simple keyword -> OSM tag mapping
-TAG_MAP: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\b(coffee|cafe)\b", re.I), '["amenity"="cafe"]'),
-    (re.compile(r"\b(restaurant|food|dinner|lunch)\b", re.I), '["amenity"="restaurant"]'),
-    (re.compile(r"\b(bar|pub|drinks|cocktail)\b", re.I), '["amenity"~"^(bar|pub)$"]'),
-    (re.compile(r"\b(club|nightclub)\b", re.I), '["amenity"="nightclub"]'),
-    (re.compile(r"\b(park|garden)\b", re.I), '["leisure"="park"]'),
-    (re.compile(r"\b(museum)\b", re.I), '["tourism"="museum"]'),
-    (re.compile(r"\b(gallery|art)\b", re.I), '["tourism"="gallery"]'),
-    (re.compile(r"\b(beach)\b", re.I), '["natural"="beach"]'),
-    (re.compile(r"\b(zoo|aquarium)\b", re.I), '["tourism"~"^(zoo|aquarium)$"]'),
-    (re.compile(r"\b(mall|shopping)\b", re.I), '["shop"="mall"]'),
-]
 
 
 def _build_address(tags: dict[str, Any]) -> Optional[str]:
@@ -50,7 +44,7 @@ def _interest_to_filter(interest: str) -> str:
             return osm_filter
 
     # Fallback: try name match for the interest, case-insensitive
-    # Escape quotes for Overpass regex string
+    # Escape quotes/backslashes for Overpass regex string
     safe = re.sub(r'["\\]', "", interest).strip()
     if safe:
         return f'["name"~"{safe}",i]'
@@ -76,8 +70,42 @@ class PlacesService:
     Drop-in replacement for Google Places.
     Returns up to 3 examples in Miami based on the interest.
     """
+
     def __init__(self, cache: dict[str, list[dict[str, Any]]]) -> None:
         self.cache = cache
+
+    async def _fetch_overpass(self, query: str) -> dict[str, Any]:
+        """
+        Resilient Overpass call:
+        - rotates endpoints
+        - retries w/ exponential backoff + jitter
+        - uses correct request encoding for /api/interpreter
+        """
+        attempts = 4
+        base_delay = 0.6
+
+        timeout = httpx.Timeout(30.0, connect=10.0)
+
+        last_err: Exception | None = None
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for i in range(attempts):
+                endpoint = OVERPASS_ENDPOINTS[i % len(OVERPASS_ENDPOINTS)]
+                try:
+                    # Most compatible format for Overpass interpreter
+                    r = await client.post(endpoint, data={"data": query})
+                    r.raise_for_status()
+                    return r.json()
+                except (
+                    httpx.HTTPStatusError,
+                    httpx.TimeoutException,
+                    httpx.RequestError,
+                ) as e:
+                    last_err = e
+                    delay = base_delay * (2**i) + random.uniform(0, 0.3)
+                    await asyncio.sleep(delay)
+
+        raise last_err or RuntimeError("Overpass request failed")
 
     async def get_examples(self, interest: str, cache_key: str) -> list[dict[str, Any]]:
         if cache_key in self.cache:
@@ -86,10 +114,12 @@ class PlacesService:
         osm_filter = _interest_to_filter(interest)
         query = _overpass_query(osm_filter)
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(OVERPASS_URL, data=query)
-            r.raise_for_status()
-            data = r.json()
+        # IMPORTANT: never crash /api/chat if Overpass is down.
+        try:
+            data = await self._fetch_overpass(query)
+        except Exception:
+            self.cache[cache_key] = []
+            return []
 
         elements = data.get("elements", []) or []
 
@@ -115,14 +145,15 @@ class PlacesService:
 
             address = _build_address(tags)
 
-            # Keep the same shape your UI likely expects
-            cards.append({
-                "name": name,
-                "address": address,
-                "rating": None,
-                "user_ratings_total": None,
-                "maps_url": f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=18/{lat}/{lon}",
-            })
+            cards.append(
+                {
+                    "name": name,
+                    "address": address,
+                    "rating": None,
+                    "user_ratings_total": None,
+                    "maps_url": f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=18/{lat}/{lon}",
+                }
+            )
 
             seen_names.add(name)
             if len(cards) >= 3:
