@@ -10,18 +10,22 @@ AI-Powered Onboarding (Miami City Guide)
 
 # Overview
 
-This project implements a mobile-first AI onboarding experience for HelloCity.
+This project implements a **mobile-first AI onboarding experience** for HelloCity.
 
-The assistant collects exactly **three interests** about what a user enjoys doing in Miami. After each detected interest, the system:
+The assistant learns what a user enjoys doing in Miami by collecting **exactly three interests** through a conversational interface.
 
-1. Validates the interest
-2. Fetches three real Miami venues
-3. Asks the user to confirm
-4. Moves forward regardless of confirmation
-5. Stops after three interests and returns a structured profile
+For every detected interest the system:
 
-The backend fully controls progression logic and session state.
-The LLM is used only for reasoning and structured extraction.
+1. Extracts interests from natural language
+2. Deduplicates and validates them
+3. Fetches **real Miami venues** using Google Places
+4. Shows examples for confirmation
+5. Moves forward regardless of Yes/No
+6. Stops after **three interests** and returns a structured user profile
+
+The backend controls the full onboarding flow.
+
+The LLM is used **only for reasoning and language understanding**.
 
 ---
 
@@ -29,39 +33,47 @@ The LLM is used only for reasoning and structured extraction.
 
 ## Frontend
 
-* React (Vite)
-* TypeScript
-* Custom CSS styled to match HelloCity branding
-* Mobile-first responsive layout
-* Session ID stored in `sessionStorage` (resets when tab is closed)
+- React (Vite)
+- TypeScript
+- Custom CSS styled to match HelloCity branding
+- Mobile-first responsive layout
+- Session ID stored in `sessionStorage` (resets when tab is closed)
 
 ## Backend
 
-* FastAPI (Python)
-* Gemini 2.5 Flash (Google GenAI SDK)
-* OpenStreetMap + Overpass API for venue discovery
-* In-memory session storage (designed for easy Redis upgrade)
+- FastAPI (Python)
+- Gemini 2.5 Flash (Google GenAI SDK)
+- Google Places API (venue discovery)
+- In-memory session store (Redis-ready)
 
 ---
 
 # LLM Details
 
-Model: **Gemini 2.5 Flash**
-SDK: **google-genai**
+Model
 
-Gemini is used for:
+**Gemini 2.5 Flash**
 
-* Extracting structured interest categories from natural language
-* Generating short conversational responses
+SDK
 
-Gemini is not responsible for:
+**google-genai**
 
-* Tracking progress
-* Enforcing three interests
-* Deduplication
-* Session management
+Gemini is responsible for:
 
-All deterministic logic is handled server-side.
+- Extracting interest categories from natural language
+- Generating conversational responses
+
+Gemini **does not control application logic** .
+
+All deterministic logic is handled server-side:
+
+- onboarding flow
+- interest limits
+- deduplication
+- session state
+- venue lookup
+
+This keeps the system predictable and reliable.
 
 ---
 
@@ -73,85 +85,106 @@ Frontend sends:
 
 ```json
 {
-  "session_id": "abc123",
-  "message": "I love Beaches"
+    "session_id": "abc123",
+    "message": "I like beaches and coffee shops"
 }
 ```
 
-Backend:
+Backend pipline:
 
-* Calls Gemini to extract structured interests
-* Deduplicates interests
-* Adds at most one new interest per message
-* Fetches three real venues using Overpass
-* Returns structured response
-* Stops after exactly three interests
-
----
-
-## Clear Separation of Responsibilities
-
-### LLM Responsibilities
-
-* Understand user input
-* Extract interest categories
-* Produce friendly tone
-
-### Backend Responsibilities
-
-* Maintain session state
-* Prevent duplicate interests
-* Enforce maximum of three interests
-* Control onboarding progression
-* Fetch venues from Overpass
-* Construct final profile object
-
-This ensures predictable behavior and prevents LLM-driven flow errors.
+- Gemini extracts structured interests
+- Backend deduplicates interests
+- Multiple interests per message are allowed
+- First interest is shown immediately
+- Remaining interests are queued
+- Examples fetched from Google Places
+- User confirms with Yes/No
+- System automatically advances to the next queued interest
+- Stops after exactly three interests
 
 ---
 
 # Interest Extraction Strategy
 
-Gemini is prompted to return strict JSON:
+Gemini returns strict JSON:
 
 ```json
 {
-  "interests": ["Beaches"]
+    "interests": ["Beaches", "Coffee shops"]
 }
 ```
 
-Rules:
+Rules enforced by the prompt:
 
-* Broad activity categories only
-* Maximum three
-* JSON only
-* Backend validates output before use
+- Return **broad activity categories**
+- Maximum **3 interests**
+- No explanations
+- Strict JSON output
 
-If JSON parsing fails, fallback logic is triggered.
+Backend validation ensures:
+
+- safe JSON parsing
+- duplicate filtering
+- max interest enforcement
 
 ---
 
-# Venue Validation (OpenStreetMap + Overpass)
+# Venue Discovery (Google Places API)
 
-Instead of Google Places, this implementation uses:
-
-* OpenStreetMap data
-* Overpass API
+Venue validation uses **Google Places Text Search** .
 
 For each interest:
 
-* Construct an Overpass query
-* Search within Miami bounding box
-* Filter relevant OSM tags
-* Return top three matches
+1. Build query
+    ```
+    "{interest} in Miami"
+    ```
+2. Call Google Places API
+3. Return top three venues
 
-Each example includes:
+Each venue card includes:
 
-* Name
-* Address (when available)
-* Map link
+- Name
+- Address
+- Rating
+- Review count
+- Google Maps link
 
-Regardless of Yes/No confirmation, the interest counts and flow continues.
+Example card data:
+
+```
+South Pointe Park
+1 Washington Ave, Miami Beach
+⭐ 4.8 (12k reviews)
+```
+
+Clicking a card opens the **exact Google Maps place page** using the place ID.
+
+---
+
+# Multi-Interest Handling
+
+Users often mention multiple activities in a single message.
+
+Example:
+
+```
+"I like beaches and coffee shops"
+```
+
+System behavior:
+
+```
+Interest 2 → Coffee shops
+```
+
+Flow:
+
+1. Beaches shown first
+2. User confirms Yes/No
+3. Coffee shops shown next automatically
+
+This ensures no interests are lost while maintaining a clean UX.
 
 ---
 
@@ -160,9 +193,10 @@ Regardless of Yes/No confirmation, the interest counts and flow continues.
 Current implementation uses in-memory storage:
 
 ```python
-sessions = {
+{
   session_id: {
     interests: [],
+    pending_interests: [],
     history: [],
     last_interest: None,
     last_examples: None
@@ -170,15 +204,20 @@ sessions = {
 }
 ```
 
-Behavior:
+Features:
 
-* Prevents duplicates
-* Adds at most one interest per message
-* Stops at exactly three
-* Session resets when browser tab is closed
-* Backend restart clears all sessions
+- duplicate prevention
+- queued interests
+- deterministic onboarding flow
+- auto-advance after feedback
+- exactly three interests enforced
 
-Designed to be easily replaced with Redis.
+Sessions reset when:
+
+- the browser tab closes
+- backend restarts
+
+The store is designed to be easily replaced by Redis.
 
 ---
 
@@ -190,8 +229,8 @@ Request:
 
 ```json
 {
-  "session_id": "string",
-  "message": "string"
+    "session_id": "string",
+    "message": "string"
 }
 ```
 
@@ -223,23 +262,30 @@ Request:
 }
 ```
 
-Returns updated assistant message and onboarding state.
+Behavior
+
+- Advances queued interests automatically
+- Returns next venue examples if available
+- Returns profile when onboarding completes
 
 ---
 
 # UI Design
 
-The UI is styled to match HelloCity branding:
+The UI is styled to reflect HelloCity branding.
 
-* HelloCity Yellow accent
-* Black venue cards
-* Clean white background
-* iOS-style rounded pill buttons
-* Light gray user bubbles
-* Soft yellow assistant bubbles
-* Smooth mobile scrolling
+Features:
 
-Designed mobile-first and responsive.
+- HelloCity yellow accent
+- black venue cards
+- white background
+- iOS-style pill buttons
+- soft yellow assistant chat bubbles
+- light gray user bubbles
+- sticky chat input bar
+- smooth mobile scrolling
+
+Layout optimized for mobile devices.
 
 ---
 
@@ -260,6 +306,7 @@ Create `.env`:
 ```
 GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-2.5-flash
+GOOGLE_PLACES_API_KEY=your_key
 ALLOWED_ORIGINS=http://localhost:5173
 ```
 
@@ -304,7 +351,8 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-2.5-flash
-ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
+GOOGLE_PLACES_API_KEY=your_key
+ALLOWED_ORIGINS=https://hello-city-task.vercel.app
 ```
 
 Verify health:
@@ -357,58 +405,83 @@ app.add_middleware(
 
 Important:
 
-* Origins must match exactly
-* No trailing slashes
-* Include correct Vercel domain
+- Origins must match exactly
+- No trailing slashes
+- Include correct Vercel domain
 
 ---
 
 # Edge Cases Handled
 
-* Duplicate interests prevented
-* Strict three interest limit
-* JSON parsing fallback
-* Graceful API failure handling
-* Session isolation per user
-* Preflight CORS handling
-* Overpass timeout handling
+- multiple interests in one message
+- duplicate interest prevention
+- strict three-interest limit
+- invalid JSON from LLM
+- graceful API failure handling
+- Google Places downtime handling
+- session isolation per user
+- CORS preflight handling
 
 ---
 
 # Design Decisions
 
-* Backend controls progression logic
-* LLM used only for reasoning
-* OpenStreetMap chosen for open data
-* In-memory state sufficient for demo
-* Deterministic onboarding flow
-* Clean separation of concerns
+Key design principles:
+
+**Backend-controlled flow**
+
+The onboarding progression is deterministic and never controlled by the LLM.
+
+**LLM used only for reasoning**
+
+Gemini performs:
+
+- language understanding
+- interest extraction
+- conversational phrasing
+
+**Google Places chosen for accuracy**
+
+Compared to open datasets, Google Places provides:
+
+- higher venue coverage
+- better ranking
+- more reliable geolocation
+
+**Session storage designed for scalability**
+
+Current in-memory store can easily migrate to Redis.
 
 ---
 
 # Future Improvements
 
-* Redis for persistent sessions
-* Caching Overpass responses
-* Smarter interest taxonomy normalization
-* Venue image enrichment
-* Analytics
-* Rate limiting
-* Structured logging
-* Monitoring and observability
+Potential enhancements:
+
+- Redis session store
+- Places API caching
+- venue photos
+- open hours
+- distance ranking
+- smarter interest taxonomy
+- analytics
+- rate limiting
+- monitoring and logging
 
 ---
 
 # Final Result
 
-The system:
+The system successfully:
 
-* Collects exactly three interests
-* Validates each using real Miami venues
-* Maintains backend session state
-* Prevents duplicates
-* Returns structured profile
-* Matches HelloCity branding
-* Fully deployable on modern cloud platforms
+- collects exactly three interests
+- validates them using real Miami venues
+- handles multi-interest messages
+- auto-advances through confirmations
+- maintains backend session state
+- prevents duplicates
+- returns a structured profile
+- matches HelloCity branding
+- deploys easily on modern cloud platforms
 
 ---
