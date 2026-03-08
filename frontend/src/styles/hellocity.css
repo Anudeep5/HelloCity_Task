@@ -241,6 +241,33 @@ body {
     color: var(--hc-muted);
 }
 
+.hc-reset-button {
+  border-radius: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hc-reset-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hc-reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hc-headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* Footer input: iOS pill + yellow send circle feel */
 .hc-footer {
     position: sticky;

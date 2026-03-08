@@ -1,6 +1,12 @@
 from fastapi import APIRouter
 
-from app.schemas.chat import ChatRequest, FeedbackRequest, ChatResponse, PlaceCard
+from app.schemas.chat import (
+    ChatRequest,
+    FeedbackRequest,
+    ChatResponse,
+    PlaceCard,
+    ResetRequest,
+)
 from app.core.config import settings
 from app.core.storage import InMemoryStore
 from app.services.gemini_service import GeminiService
@@ -178,3 +184,12 @@ async def feedback(req: FeedbackRequest):
         onboarding_complete=False,
         profile=None,
     )
+
+
+@router.post("/api/reset")
+def reset(req: ResetRequest):
+    # hard delete the session so next request starts clean
+    if req.session_id in store.sessions:
+        del store.sessions[req.session_id]
+
+    return {"ok": True}

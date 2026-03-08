@@ -24,3 +24,7 @@ export function postChat(req: ChatRequest): Promise<ChatResponse> {
 export function postFeedback(req: FeedbackRequest): Promise<ChatResponse> {
   return postJSON<FeedbackRequest, ChatResponse>("/api/feedback", req);
 }
+
+export function postReset(session_id: string): Promise<{ ok: boolean }> {
+  return postJSON<{ session_id: string }, { ok: boolean }>("/api/reset", { session_id });
+}

@@ -1,14 +1,17 @@
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
+
 class ChatRequest(BaseModel):
     session_id: str = Field(..., min_length=3)
     message: str = Field(..., min_length=1)
+
 
 class FeedbackRequest(BaseModel):
     session_id: str = Field(..., min_length=3)
     interest: str = Field(..., min_length=1)
     choice: str = Field(..., pattern="^(yes|no)$")
+
 
 class PlaceCard(BaseModel):
     name: str
@@ -18,6 +21,7 @@ class PlaceCard(BaseModel):
     maps_url: Optional[str] = None
     photo_url: Optional[str] = None
 
+
 class ChatResponse(BaseModel):
     assistant_message: str
     interests: list[str]
@@ -26,3 +30,7 @@ class ChatResponse(BaseModel):
     examples: list[PlaceCard] = Field(default_factory=list)
     onboarding_complete: bool
     profile: Optional[dict[str, Any]] = None
+
+
+class ResetRequest(BaseModel):
+    session_id: str = Field(..., min_length=3)
