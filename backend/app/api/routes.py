@@ -28,10 +28,7 @@ def health():
 async def chat(req: ChatRequest):
     session = store.get_session(req.session_id)
 
-    # Only return profile if:
-    # - we already have 3 interests
-    # - nothing is queued to show
-    # (we never want to skip showing examples for a captured interest)
+    # If already complete and nothing left queued, return profile immediately
     if len(session["interests"]) >= settings.MAX_INTERESTS and not (
         session.get("pending_interests") or []
     ):
@@ -44,8 +41,16 @@ async def chat(req: ChatRequest):
             profile=profile,
         )
 
-    extracted = llm.extract_interests(
-        req.message, existing_interests=session["interests"]
+    # One Gemini call for both extraction + assistant reply
+    analysis = await llm.analyze_message(
+        user_text=req.message,
+        existing_interests=session["interests"],
+        max_interests=settings.MAX_INTERESTS,
+    )
+
+    extracted = analysis.get("interests", [])
+    assistant_message = analysis.get(
+        "assistant_reply", "Got it. What do you like doing around Miami?"
     )
 
     interest_detected = False
@@ -55,16 +60,17 @@ async def chat(req: ChatRequest):
     remaining = settings.MAX_INTERESTS - len(session["interests"])
     added_interests: list[str] = []
 
-    # Add as many as we can from this message, up to remaining slots.
+    # Add as many as possible from this message
     for cand in extracted:
         if remaining <= 0:
             break
+
         added, canonical = store.add_interest_deduped(session, cand)
         if added and canonical:
             added_interests.append(canonical)
             remaining -= 1
 
-    # Queue any extras (they will be auto-shown after the user clicks Yes/No)
+    # Queue extras to show later via feedback flow
     session["pending_interests"] = (
         added_interests[1:] if len(added_interests) > 1 else []
     )
@@ -73,11 +79,7 @@ async def chat(req: ChatRequest):
         interest_detected = True
         interest_added = added_interests[0]
 
-    assistant_message = llm.chat_reply(
-        session["interests"], req.message, added_interests
-    )
-
-    # If we detected an interest to show now, fetch examples for it
+    # Fetch examples only for the first interest we want to show now
     if interest_detected and interest_added:
         cache_key = store.normalize_interest(interest_added)
         try:
@@ -86,19 +88,15 @@ async def chat(req: ChatRequest):
             session["last_interest"] = interest_added
             session["last_examples"] = ex or []
         except Exception:
-            # Never fail the chat endpoint due to places lookup
-            examples_models = []
+            # Never fail the endpoint because of places lookup
             session["last_interest"] = interest_added
             session["last_examples"] = []
+            examples_models = []
     else:
         session["last_interest"] = None
         session["last_examples"] = []
         examples_models = []
 
-    # Completion logic:
-    # - If we are returning examples now, do NOT complete
-    # - If we have queued interests to show, do NOT complete
-    # - Only complete when we have 3 interests and nothing left to show
     has_pending = bool(session.get("pending_interests"))
     has_examples = bool(examples_models)
 
@@ -134,7 +132,7 @@ async def feedback(req: FeedbackRequest):
 
     pending = session.get("pending_interests") or []
 
-    # 1) If we have queued interests from the last user message, show the next one immediately
+    # Show the next queued interest immediately
     if pending:
         next_interest = pending.pop(0)
         session["pending_interests"] = pending
@@ -163,7 +161,7 @@ async def feedback(req: FeedbackRequest):
             profile=None,
         )
 
-    # 2) No pending interests left. If we have 3 interests, finish now.
+    # No pending interests left, finish if we have enough
     if len(session["interests"]) >= settings.MAX_INTERESTS:
         profile = {"interests": session["interests"][: settings.MAX_INTERESTS]}
         return ChatResponse(
@@ -174,7 +172,7 @@ async def feedback(req: FeedbackRequest):
             profile=profile,
         )
 
-    # 3) Otherwise ask for the next interest
+    # Otherwise ask for the next interest
     remaining = settings.MAX_INTERESTS - len(session["interests"])
     msg = f"Cool. What else are you into in Miami? ({remaining} left)"
     return ChatResponse(
@@ -188,7 +186,6 @@ async def feedback(req: FeedbackRequest):
 
 @router.post("/api/reset")
 def reset(req: ResetRequest):
-    # hard delete the session so next request starts clean
     if req.session_id in store.sessions:
         del store.sessions[req.session_id]
 

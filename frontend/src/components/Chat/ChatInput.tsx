@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 type ChatInputProps = {
     input: string;
     loading: boolean;
@@ -15,10 +17,25 @@ export default function ChatInput({
     onChange,
     onSubmit,
 }: ChatInputProps) {
+    const inputRef = useRef<HTMLInputElement | null>(null);
+
+    // focus when component loads
+    useEffect(() => {
+        inputRef.current?.focus();
+    }, []);
+
+    // focus again after assistant reply
+    useEffect(() => {
+        if (!loading && !disabled) {
+            inputRef.current?.focus();
+        }
+    }, [loading, disabled]);
+
     return (
         <form className="hc-footer" onSubmit={onSubmit}>
             <div className="hc-inputRow">
                 <input
+                    ref={inputRef}
                     className="hc-input"
                     value={input}
                     onChange={(e) => onChange(e.target.value)}
